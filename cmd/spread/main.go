@@ -34,6 +34,7 @@ var (
 	seed           = flag.Int64("seed", 0, "Seed for job order permutation")
 	repeat         = flag.Int("repeat", 0, "Number of times to repeat each task")
 	garbageCollect = flag.Bool("gc", false, "Garbage collect backend resources when possible")
+	suiteArtifacts = flag.String("suite-artifacts", "", "Download contents of src-dir to dst-dir after all tasks have finished for each suite (Usage: -suite-artifacts <src-dir>:<dst-dir>)")
 )
 
 func main() {
@@ -96,6 +97,7 @@ func run() error {
 		Seed:           *seed,
 		Repeat:         *repeat,
 		GarbageCollect: *garbageCollect,
+		SuiteArtifacts: *suiteArtifacts,
 	}
 
 	project, err := spread.Load(".")

@@ -36,6 +36,7 @@ type Options struct {
 	Seed           int64
 	Repeat         int
 	GarbageCollect bool
+	SuiteArtifacts string
 }
 
 type Runner struct {
@@ -645,6 +646,12 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 			}
 		}
 	}
+	if !abend && insideSuite != nil {
+		if err := r.fetchSuiteArtifacts(client); err != nil {
+			printf("Cannot copy contents %v", err)
+			r.tomb.Killf("cannot copy contents: %v", err)
+		}
+	}
 
 	if !abend && insideSuite != nil {
 		if !r.run(client, last, restoring, insideSuite, insideSuite.Restore, insideSuite.Debug, &abend) {
@@ -672,6 +679,39 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 		printf("Discarding %s...", server)
 		r.discardServer(server)
 	}
+}
+
+func (r *Runner) fetchSuiteArtifacts(client *Client) error {
+	parts := strings.Split(r.options.SuiteArtifacts, ":")
+	if len(parts) != 2 {
+		return nil
+	}
+	source := parts[0]
+	dest := parts[1]
+
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return fmt.Errorf("cannot create artifacts directory: %v", err)
+	}
+
+	tarr, tarw := io.Pipe()
+
+	var stderr bytes.Buffer
+	cmd := exec.Command("tar", "xJ")
+	cmd.Dir = dest
+	cmd.Stdin = tarr
+	cmd.Stderr = &stderr
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Errorf("cannot start unpacking tar: %v", err)
+	}
+
+	printf("Fetching artifacts")
+
+	err = client.RecvTar(source, []string{}, tarw)
+	tarw.Close()
+	terr := cmd.Wait()
+
+	return firstErr(err, terr)
 }
 
 func (r *Runner) job(backend *Backend, system *System, suite *Suite, last *Job, order []int) *Job {
