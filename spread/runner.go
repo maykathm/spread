@@ -658,6 +658,13 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 		}
 		insideBackend = false
 	}
+
+	if r.project.PreRestoreProject != nil {
+		if err := r.project.PreRestoreProject(client, last, r.project); err != nil {
+			fmt.Printf("Error running PreRestoreProject: %v", err)
+		}
+	}
+
 	if !abend && insideProject {
 		if !r.run(client, last, restoring, r.project, r.project.Restore, r.project.Debug, &abend) {
 			r.add(&stats.ProjectRestoreError, last)

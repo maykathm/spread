@@ -44,6 +44,8 @@ type Project struct {
 
 	WarnTimeout Timeout `yaml:"warn-timeout"`
 	KillTimeout Timeout `yaml:"kill-timeout"`
+
+	PreRestoreProject func(*Client, *Job, *Project) error
 }
 
 func (p *Project) String() string { return "project" }
