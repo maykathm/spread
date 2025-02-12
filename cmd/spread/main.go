@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	mrand "math/rand"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"time"
@@ -36,7 +39,47 @@ var (
 	seed           = flag.Int64("seed", 0, "Seed for job order permutation")
 	repeat         = flag.Int("repeat", 0, "Number of times to repeat each task")
 	garbageCollect = flag.Bool("gc", false, "Garbage collect backend resources when possible")
+	download       = flag.String("download", "", "Download contents of src-dir to dst-dir after all jobs have finished for each suite (Usage: -download <src-dir>:<dst-dir>)")
 )
+
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func downloadDir(downloadString string, client *spread.Client) error {
+	parts := strings.Split(downloadString, ":")
+	if len(parts) != 2 {
+		return nil
+	}
+	source := parts[0]
+	dest := parts[1]
+
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return fmt.Errorf("cannot create artifacts directory: %v", err)
+	}
+
+	tarr, tarw := io.Pipe()
+
+	var stderr bytes.Buffer
+	cmd := exec.Command("tar", "xJ")
+	cmd.Dir = dest
+	cmd.Stdin = tarr
+	cmd.Stderr = &stderr
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Errorf("cannot start unpacking tar: %v", err)
+	}
+	err = client.RecvTar(source, []string{}, tarw)
+	tarw.Close()
+	terr := cmd.Wait()
+
+	return firstErr(err, terr)
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -120,6 +163,12 @@ func run() error {
 
 	if options.Discard && options.ReusePid == 0 {
 		options.Reuse = true
+	}
+
+	if download != nil {
+		project.PreRestoreProject = func(client *spread.Client, job *spread.Job, project *spread.Project) error {
+			return downloadDir(*download, client)
+		}
 	}
 
 	runner, err := spread.Start(project, options)
